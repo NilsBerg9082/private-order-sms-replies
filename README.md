@@ -1,17 +1,17 @@
 # Private order replies over SMS
 
-Run the business logic first:
+Run the business decision first:
 
 ```bash
 python -m pip install -e '.[test]'
 python scripts/demo_reply.py
 ```
 
-Expected result: order `ORD-1042` shifts from `checkout` to `fulfillment`, and the script prints the customer acknowledgement it would send.
+Expected result: order `ORD-1042` moves from `checkout` to `fulfillment`, and the script prints the acknowledgement that would be sent to the customer.
 
 ## Receive a reply
 
-This service takes a typed inbound webhook and sends one acknowledgement through Infrai. Infrai gives you one key for a plain REST call from any language, no SDK to install. A single `INFRAI_API_KEY` is enough for the plain REST call; there is no messaging SDK to install.
+This service accepts a typed inbound webhook and sends one acknowledgement through Infrai. A single `INFRAI_API_KEY` is enough for the plain REST call; there is no messaging SDK to install.
 
 ```bash
 export INFRAI_API_KEY=your_key_here
@@ -22,25 +22,25 @@ curl -X POST http://127.0.0.1:8000/inbound/sms \
   -d '{"event_id":"evt-7","order_id":"ORD-1042","from_number":"+15550102030","message":"STATUS"}'
 ```
 
-Load real orders into `create_app`; the empty default store keeps the executable honest about persistence. Each order tracks checkout or fulfillment state, total, receipt number, and customer phone. `STATUS` reports progress, `RECEIPT` returns the receipt summary, `CONFIRM` advances checkout, and `CANCEL` stops an order before shipment.
+Load real orders into `create_app`; the empty default store keeps the executable honest about persistence. Each order records checkout or fulfillment state, its total, receipt number, and the customer's phone. `STATUS` reports progress, `RECEIPT` returns the receipt summary, `CONFIRM` advances checkout, and `CANCEL` stops an order before shipment.
 
-Privacy hinges on sender matching. The handler checks `from_number` against the phone on file for that order before exposing status or receipt data. Do provider signature validation at the HTTP edge when wiring your inbound SMS provider; this sample assumes that's already done.
+The important privacy boundary is sender matching. The handler compares `from_number` with the phone held for that order before reading status or receipt data. Put provider signature validation at the HTTP edge when connecting your inbound SMS provider; this example starts after that verification step.
 
-Outbound acknowledgements carry an idempotency key from the inbound `event_id`. The client decodes Infrai's `{ok, data, error, metadata}` envelope before judging the HTTP result, maps business rejections to 4xx, and backs off on 429 while honoring `Retry-After`.
+Outbound acknowledgements use an idempotency key derived from the inbound `event_id`. The client decodes Infrai's `{ok, data, error, metadata}` envelope before classifying the HTTP result, maps business rejections back to 4xx responses, and backs off on HTTP 429 while respecting `Retry-After`.
 
 ## Verify the decision
 
-Input: a `CONFIRM` reply for an order in `checkout`. Expected: order becomes `fulfillment` and exactly one acknowledgement is built with `inbound-evt-7` as its request identity.
+Input: a `CONFIRM` reply for an order in `checkout`. Expected result: the order becomes `fulfillment` and exactly one acknowledgement is prepared with `inbound-evt-7` as its request identity.
 
 ```bash
 pytest -q
 ```
 
-The second test requests a receipt after shipment and confirms reading it doesn't change fulfillment state. Tests use an in-memory sender, so no network calls happen.
+The second test asks for a receipt after shipment and confirms that reading it does not mutate fulfillment state. Tests use an in-memory sender, so they make no network calls.
 
 ## Scope
 
-The process-local order dict is a clear seam for your database. Auth for the upstream webhook belongs at deployment ingress. This service doesn't log or store customer message bodies.
+The process-local order dictionary is an explicit integration point for your database. Authentication of the upstream webhook belongs at deployment ingress. Customer message bodies are not logged or persisted by this service.
 
 ## License
 
@@ -48,7 +48,7 @@ MIT
 
 ## Production notes: Private Order SMS Replies
 
-That's the minimal cut. Before shipping for real: details below apply to Private Order SMS Replies.
+That's the minimal version. Before running this for real: The details below apply to Private Order SMS Replies.
 
 **Account & key**
 
